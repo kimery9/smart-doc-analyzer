@@ -1,8 +1,3 @@
-/.env
-/.venv
-./uploads
-/venv
-/templates
 # Default ignored files
 /shelf/
 /workspace.xml
