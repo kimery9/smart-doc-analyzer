@@ -16,6 +16,9 @@ from models import db, Document, Paragraph, Sentence, Keyword, User
 from openai import OpenAI
 from flask import render_template, redirect, url_for, request, flash
 from flask_login import login_user, logout_user, current_user, login_required, LoginManager, UserMixin
+import threading
+from queue import Queue
+
 
 #ai
 client = OpenAI()
@@ -86,19 +89,26 @@ def register():
     return jsonify({'message': 'User registered successfully'}), 201
 
 
+file_processing_queue = Queue()
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+# Number of worker threads
+num_worker_threads = 5  # Example: 5 threads
 
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
+def process_file_from_queue():
+    while True:
+        task = file_processing_queue.get()
+        with app.app_context():
+            try:
+                process_file(*task)
+            finally:
+                file_processing_queue.task_done()
 
+# Start multiple worker threads
+for i in range(num_worker_threads):
+    t = threading.Thread(target=process_file_from_queue, daemon=True)
+    t.start()
+
+def process_file(filepath, filename):
     text = ""
     if filename.lower().endswith('.pdf'):
         text = extract_text_from_pdf(filepath)
@@ -108,9 +118,6 @@ def upload_file():
         text = extract_text_from_txt(filepath)
     elif filename.lower().endswith('.docx'):
         text = extract_text_from_docx(filepath)
-    else:
-        return jsonify({'error': 'Unsupported file type'}), 400
-
     full_text = text
 
     document_sentiment = analyze_sentiment(full_text)
@@ -137,6 +144,33 @@ def upload_file():
     db.session.commit()
 
     return jsonify({'message': f'{filename} uploaded successfully', 'document_sentiment': document_sentiment}), 200
+
+
+threading.Thread(target=process_file_from_queue, daemon=True).start()
+
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    files = request.files.getlist('file')  # Get a list of all files uploaded under 'file' form field
+
+    if not files or all(file.filename == '' for file in files):
+        return jsonify({'error': 'No files selected'}), 400
+
+    processed_files = []  # Keep track of files processed
+
+    for file in files:
+        if file:  # Check if file exists
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            file_processing_queue.put((filepath, filename))
+            processed_files.append(filename)
+
+    if not processed_files:  # If no files were processed
+        return jsonify({'error': 'No valid files were processed'}), 400
+
+    return jsonify({'message': f'Files queued for processing: {", ".join(processed_files)}'}), 202
+
 
 
 @app.route('/document/summary', methods=['POST'])
