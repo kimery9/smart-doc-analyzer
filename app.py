@@ -1,5 +1,4 @@
 import requests
-from flask import Flask, request, jsonify, session
 from werkzeug.utils import secure_filename
 import os
 import fitz  # PyMuPDF
@@ -14,14 +13,23 @@ from flask_cors import CORS
 from config import Config
 from models import db, Document, Paragraph, Sentence, Keyword, User
 from openai import OpenAI
-from flask import render_template, redirect, url_for, request, flash
-from flask_login import login_user, logout_user, current_user, login_required, LoginManager, UserMixin
+from flask import request
+
 import threading
 from queue import Queue
+from flask import Flask, redirect, url_for, flash, jsonify, session
 
+from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
+from flask_dance.contrib.google import make_google_blueprint, google
+from dotenv import load_dotenv
 
-#ai
-client = OpenAI()
+# Load environment variables from .env file
+load_dotenv()
+
+# ai
+client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),
+)
 
 GOOGLE_SEARCH_API_URL = "https://www.googleapis.com/customsearch/v1"
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -32,83 +40,35 @@ app = Flask(__name__)
 app.config.from_object('config.Config')
 app.config['SESSION_COOKIE_HTTPONLY'] = False
 CORS(app, supports_credentials=True)
+nlp = spacy.load("en_core_web_sm")
 db.init_app(app)
 
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = Config.LOGIN_VIEW
-
-# Load spaCy model
-nlp = spacy.load("en_core_web_sm")
-
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    data = request.json
-    username = data.get('username')
-    password = data.get('password')
-    user = User.query.filter_by(username=username).first()
-    if user and user.check_password(password):
-        login_user(user, remember=True)
-        session['user_id'] = user.id
-        # Query for the user's documents
-        documents = Document.query.filter_by(user_id=user.id).all()
-        # Format documents for JSON response
-        documents_data = [{'filename': doc.filename, 'id': doc.id} for doc in documents]
-        return jsonify({'message': 'Logged in successfully', 'documents': documents_data}), 200
-    return jsonify({'error': 'Invalid username or password'}), 401
-
-
-@app.route('/logout', methods=['POST'])
-@login_required
-def logout():
-    logout_user()
-    return jsonify({'message': 'Logged out successfully'}), 200
-
-
-@app.route('/register', methods=['POST'])
-def register():
-    data = request.json
-    username = data.get('username')
-    password = data.get('password')
-
-    if User.query.filter_by(username=username).first():
-        return jsonify({'error': 'Username already exists'}), 400
-
-    new_user = User(username=username)
-    new_user.set_password(password)  # Assuming set_password method exists
-
-    db.session.add(new_user)
-    db.session.commit()
-
-    return jsonify({'message': 'User registered successfully'}), 201
 
 
 file_processing_queue = Queue()
 
 # Number of worker threads
-num_worker_threads = 5  # Example: 5 threads
+num_worker_threads = 3  # Example: 5 threads
+
 
 def process_file_from_queue():
     while True:
         task = file_processing_queue.get()
+        filepath, filename, user_id = task  # Unpack userId
         with app.app_context():
             try:
-                process_file(*task)
+                process_file(filepath, filename, user_id)  # Pass userId
             finally:
                 file_processing_queue.task_done()
+
 
 # Start multiple worker threads
 for i in range(num_worker_threads):
     t = threading.Thread(target=process_file_from_queue, daemon=True)
     t.start()
 
-def process_file(filepath, filename):
+
+def process_file(filepath, filename, user_id):
     text = ""
     if filename.lower().endswith('.pdf'):
         text = extract_text_from_pdf(filepath)
@@ -121,7 +81,7 @@ def process_file(filepath, filename):
     full_text = text
 
     document_sentiment = analyze_sentiment(full_text)
-    document = Document(content=full_text, sentiment=document_sentiment, filename=filename, user_id='1')
+    document = Document(content=full_text, sentiment=document_sentiment, filename=filename, user_id=user_id)  # Use user_id
     db.session.add(document)
 
     paragraphs_text = split_into_paragraphs(full_text)
@@ -143,7 +103,7 @@ def process_file(filepath, filename):
 
     db.session.commit()
 
-    return jsonify({'message': f'{filename} uploaded successfully', 'document_sentiment': document_sentiment}), 200
+    return jsonify({'message': f'{filename} uploaded successfully', 'sentiment': document_sentiment}), 200
 
 
 threading.Thread(target=process_file_from_queue, daemon=True).start()
@@ -151,25 +111,50 @@ threading.Thread(target=process_file_from_queue, daemon=True).start()
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    files = request.files.getlist('file')  # Get a list of all files uploaded under 'file' form field
-
+    files = request.files.getlist('file')
+    userId = request.form.get('userId')
+    if not userId:
+        response = jsonify({'error': 'UserId is required'}), 400
+        print(response)  # Print the response before returning
+        return response
     if not files or all(file.filename == '' for file in files):
-        return jsonify({'error': 'No files selected'}), 400
+        response = jsonify({'error': 'No files selected'}), 400
+        print(response)  # Print the response before returning
+        return response
 
-    processed_files = []  # Keep track of files processed
+    processed_files = []
 
     for file in files:
-        if file:  # Check if file exists
+        if file:
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
-            file_processing_queue.put((filepath, filename))
+            file_processing_queue.put((filepath, filename, userId))  # Include userId in the queue
             processed_files.append(filename)
 
-    if not processed_files:  # If no files were processed
-        return jsonify({'error': 'No valid files were processed'}), 400
+    if not processed_files:
+        response = jsonify({'error': 'No valid files were processed'}), 400
+        print(response)  # Print the response before returning
+        return response
 
-    return jsonify({'message': f'Files queued for processing: {", ".join(processed_files)}'}), 202
+    response = jsonify({'message': f'Files queued for processing: {", ".join(processed_files)}'}), 202
+    print(response)  # Print the response before returning
+    return response
+
+
+
+@app.route('/api/documents/user/<user_id>', methods=['GET'])
+def get_user_documents(user_id):
+    try:
+        documents = Document.query.filter_by(user_id=user_id).all()
+        documents_data = [
+            {'filename': doc.filename, 'documentId': doc.id, 'sentiment': doc.sentiment}
+            for doc in documents
+        ]
+        return jsonify(documents_data), 200
+    except Exception as e:
+        return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
+
 
 
 
@@ -184,9 +169,11 @@ def document_summary():
         return jsonify({'error': 'Document not found'}), 404
 
     # Generate summary
+    print(f"An error occurred: {document.content}")
     document_summary = get_document_summary(document.content)
 
     return jsonify({'filename': filename, 'summary': document_summary})
+
 
 @app.route('/document/keywords', methods=['POST'])
 def document_keywords():
@@ -198,11 +185,11 @@ def document_keywords():
 
     # Query keywords through the relationship chain: Document -> Paragraph -> Sentence -> Keyword
     # Filter by Document.filename instead of Document.id
-    keywords_query = db.session.query(Keyword.word).join(Sentence).join(Paragraph).join(Document).filter(Document.filename == filename).all()
+    keywords_query = db.session.query(Keyword.word).join(Sentence).join(Paragraph).join(Document).filter(
+        Document.filename == filename).all()
     keywords = [keyword[0] for keyword in keywords_query]  # Extracting the keyword strings from the query result
 
     return jsonify({'keywords': keywords})
-
 
 
 @app.route('/keyword/definition', methods=['POST'])
@@ -239,29 +226,66 @@ def search_articles():
     else:
         return jsonify({'error': 'Failed to fetch search results'}), response.status_code
 
+@app.route('/api/filter/sentiment/<sentiment>', methods=['GET'])
+def filter_by_sentiment(sentiment):
+    try:
+        paragraphs = Paragraph.query.filter_by(sentiment=sentiment).all()
+        sentences = Sentence.query.filter_by(sentiment=sentiment).all()
 
-def get_keyword_definition(keyword):
-    completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are an intelligent assistant."},
-            {"role": "user", "content": f"Define the word: {keyword}."}
-        ]
-    )
+        paragraphs_data = [{'id': p.id, 'content': p.content, 'sentiment': p.sentiment} for p in paragraphs]
+        sentences_data = [{'id': s.id, 'content': s.content, 'sentiment': s.sentiment} for s in sentences]
 
-    return completion.choices[0].message.content
+        return jsonify({'paragraphs': paragraphs_data, 'sentences': sentences_data}), 200
+    except Exception as e:
+        return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
+
+@app.route('/api/search/keyword', methods=['POST'])
+def search_by_keyword():
+    keyword = request.json.get('keyword')
+    if not keyword:
+        return jsonify({'error': 'Keyword is required'}), 400
+
+    sentences = Sentence.query.join(Sentence.keywords).filter(Keyword.word == keyword).all()
+    sentence_ids = [sentence.id for sentence in sentences]
+
+    paragraphs = Paragraph.query.join(Paragraph.sentences).filter(Sentence.id.in_(sentence_ids)).all()
+
+    sentences_data = [{'id': sentence.id, 'content': sentence.content} for sentence in sentences]
+    paragraphs_data = [{'id': paragraph.id, 'content': paragraph.content} for paragraph in paragraphs]
+
+    return jsonify({'sentences': sentences_data, 'paragraphs': paragraphs_data}), 200
+
 
 
 def get_document_summary(document_text):
-    completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are an intelligent assistant."},
-            {"role": "user", "content": f"Summarize the following document:\n\n{document_text}"}
-        ]
-    )
+    try:
+        completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "You are an intelligent assistant."},
+                {"role": "user", "content": f"Summarize the following document:\n\n{document_text}"}
+            ],
+            model="gpt-3.5-turbo"
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        # Handle exceptions or log error and return an informative message or raise the error
+        print(f"An error occurred: {str(e)}")
+        raise
 
-    return completion.choices[0].message.content
+def get_keyword_definition(keyword):
+    try:
+        completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "You are an intelligent assistant."},
+                {"role": "user", "content": f"Define the word: {keyword}."}
+            ],
+            model="gpt-3.5-turbo"
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        # Handle exceptions or log error and return an informative message or raise the error
+        print(f"An error occurred: {str(e)}")
+        raise
 
 
 def analyze_sentiment(text):
@@ -313,6 +337,7 @@ def extract_text_from_docx(filepath):
     return '\n'.join(fullText)
 
 
-with app.app_context():
-    db.create_all()  # Ensure database tables are created
-app.run(debug=True)
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()  # Ensure database tables are created
+    app.run(debug=True)

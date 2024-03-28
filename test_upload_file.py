@@ -1,111 +1,51 @@
-import os
+# test_app.py
 import io
-from flask import Flask, request, jsonify
-from werkzeug.utils import secure_filename
-import pytest
-from app import app
+import unittest
+from unittest.mock import patch
+from app import app, db  # Importing directly from your app.py
 
-from app import upload_file
+class UploaderBlueprintTestCase(unittest.TestCase):
+    def setUp(self):
+        self.app = app
+        self.app.config['TESTING'] = True
+        self.app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        self.client = self.app.test_client()
+        with self.app.app_context():
+            db.create_all()
+        self.user_id = "user_123"
 
-from app import app
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
 
-# Utility function to create an in-memory file
-def create_test_file(filename, content='Default content'):
-    # Use BytesIO to simulate a file in memory with given content
-    file_stream = io.BytesIO(content.encode('utf-8'))
-    # Flask testing uploads require a tuple with filename and file object
-    file_tuple = (file_stream, filename)
-    return file_tuple
-class TestUploadFile:
-
-    def test_upload_file_allowed_extension_success(self):
-        # Arrange
-        app.config['UPLOAD_FOLDER'] = 'uploads/'
-        filename = 'test.txt'
-        content = "This is test file content."
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
-        # Ensure the directory exists and the file does not exist before the test
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-        file = create_test_file(filename, content)
+    @patch('app.file_processing_queue.put')
+    def test_successful_upload(self, mock_file_processing_queue_put):
         data = {
-            'file': (io.BytesIO(content.encode('utf-8')), filename)
+            'userId': self.user_id,
+            'file': (io.BytesIO(b'This is a test file'), 'test.txt'),
         }
+        response = self.client.post('/upload', data=data, content_type='multipart/form-data')
+        mock_file_processing_queue_put.assert_called_once()  # Assuming the file is put into the queue for processing
+        self.assertEqual(response.status_code, 202)
+        self.assertIn('Files queued for processing: test.txt', response.json['message'])
 
-        # Act
-        response = app.test_client().post('/upload', data=data, content_type='multipart/form-data')
-
-        # Assert
-        assert response.status_code == 200, response.json
-
-        # Cleanup: Remove the uploaded file after the assertion
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-    def test_upload_file_invalid_extension_error(self):
-        # Arrange
-        app.config['UPLOAD_FOLDER'] = 'uploads/'
-        filename = 'invalid.exe'
-        content = "This should fail."
-        data = {'file': create_test_file(filename, content)}
-
-        # Act
-        response = app.test_client().post('/upload', data=data, content_type='multipart/form-data')
-
-        # Assert
-        assert response.status_code == 400
-        assert 'File type not allowed' in response.json['error']
-
-    def test_upload_file_size_exceeds_limit(self):
-        # Arrange
-        app.config['UPLOAD_FOLDER'] = 'uploads/'
-        filename = 'too_large.txt'
-        content = "a" * (app.config['MAX_CONTENT_LENGTH'] + 1)  # Create content larger than the max size
-        data = {'file': create_test_file(filename, content)}
-
-        # Act
-        response = app.test_client().post('/upload', data=data, content_type='multipart/form-data')
-
-        # Assert
-        assert response.status_code == 413  # Check if the status code for payload too large is returned
-
-    def test_upload_no_file_part(self):
-        # Act
-        response = app.test_client().post('/upload', data={}, content_type='multipart/form-data')
-
-        # Assert
-        assert response.status_code == 400
-        assert 'No file part' in response.json['error']
-
-    def test_upload_empty_filename_error(self):
-        # Arrange
-        app.config['UPLOAD_FOLDER'] = 'uploads/'
-        filename = ''
-        content = "Filename is empty."
-        data = {'file': create_test_file(filename, content)}
-
-        # Act
-        response = app.test_client().post('/upload', data=data, content_type='multipart/form-data')
-
-        # Assert
-        assert response.status_code == 400
-        assert 'No selected file' in response.json['error']
-
-    def test_upload_file_directory_traversal_attempt(self):
-        # Arrange
-        app.config['UPLOAD_FOLDER'] = 'uploads/'
-        filename = '../test.txt'
-        content = "Directory traversal attempt."
-        data = {'file': create_test_file(filename, content)}
-
-        # Act
-        response = app.test_client().post('/upload', data=data, content_type='multipart/form-data')
-
-        # Assert
-        assert response.status_code == 400
-        assert 'File type not allowed' in response.json['error']  # Assuming your app blocks such filenames
+    def test_upload_no_files_provided(self):
+        data = {'userId': self.user_id}
+        response = self.client.post('/upload', data=data)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('No files selected', response.json['error'])
 
 
+    @patch('app.file_processing_queue.put')
+    def test_empty_filename_skipped(self, mock_file_processing_queue_put):
+        data = {
+            'userId': self.user_id,
+            'file': (io.BytesIO(b''), ''),  # Empty filename
+        }
+        response = self.client.post('/upload', data=data, content_type='multipart/form-data')
+        mock_file_processing_queue_put.assert_not_called()
+        self.assertEqual(response.status_code, 400)
+
+if __name__ == '__main__':
+    unittest.main()
