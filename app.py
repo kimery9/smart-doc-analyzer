@@ -115,11 +115,9 @@ def upload_file():
     userId = request.form.get('userId')
     if not userId:
         response = jsonify({'error': 'UserId is required'}), 400
-        print(response)  # Print the response before returning
         return response
     if not files or all(file.filename == '' for file in files):
         response = jsonify({'error': 'No files selected'}), 400
-        print(response)  # Print the response before returning
         return response
 
     processed_files = []
@@ -134,11 +132,9 @@ def upload_file():
 
     if not processed_files:
         response = jsonify({'error': 'No valid files were processed'}), 400
-        print(response)  # Print the response before returning
         return response
 
     response = jsonify({'message': f'Files queued for processing: {", ".join(processed_files)}'}), 202
-    print(response)  # Print the response before returning
     return response
 
 
@@ -169,7 +165,7 @@ def document_summary():
         return jsonify({'error': 'Document not found'}), 404
 
     # Generate summary
-    print(f"An error occurred: {document.content}")
+    print(f"An error occurred")
     document_summary = get_document_summary(document.content)
 
     return jsonify({'filename': filename, 'summary': document_summary})
