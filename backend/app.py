@@ -42,7 +42,7 @@ app.config['SESSION_COOKIE_HTTPONLY'] = False
 CORS(app, supports_credentials=True)
 nlp = spacy.load("en_core_web_sm")
 db.init_app(app)
-
+migrate = Migrate(app, db)
 
 
 file_processing_queue = Queue()
