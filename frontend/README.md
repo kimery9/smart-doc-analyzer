@@ -1,70 +1,64 @@
-# Getting Started with Create React App
+# Frontend for Smart Document Analyzer
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This frontend application interacts with the Smart Document Analyzer backend to upload documents, display uploaded documents, fetch summaries, keywords, and allow filtering by sentiment or keyword. It's built using React and Ant Design for UI components, with Axios for making HTTP requests.
 
-## Available Scripts
+## Getting Started
 
-In the project directory, you can run:
+### Prerequisites
 
-### `npm start`
+- Node.js (v14 or later recommended)
+- npm (usually comes with Node.js)
+- Backend API running (refer to the backend README for setup instructions)
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### Installation
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+1. Clone the repository to your local machine.
+2. Navigate to the frontend directory where the `package.json` file is located.
+3. Install the required npm packages:
+   ```
+   npm install
+   ```
+4. Start the development server:
+   ```
+   npm start
+   ```
+   This will run the app in development mode. Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-### `npm test`
+### Environment Variables
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Before running the application, ensure you have the correct environment variables set up for connecting to your backend API and any other external services (if applicable). Create a `.env` file in the root of your frontend project folder with the necessary variables, for example:
+```
+REACT_APP_API_URL=http://127.0.0.1:5000
+```
 
-### `npm run build`
+### Running with Docker
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+To containerize and run the frontend application using Docker, follow these steps:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1. Ensure Docker is installed on your machine.
+2. Build the Docker image:
+   ```
+   docker build -t yourfrontendapp .
+   ```
+3. Run the Docker container:
+   ```
+   docker run -p 3000:3000 yourfrontendapp
+   ```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Features
 
-### `npm run eject`
+- **Document Upload:** Users can select and upload documents. The uploader supports multiple file formats and displays the upload progress.
+- **Document List:** Displays a list of uploaded documents with options to view summaries and keywords.
+- **Search and Filtering:** Provides functionality to filter documents by sentiment or search by keywords.
+- **Authentication:** Integrates with Google OAuth for user authentication and session management.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Components Overview
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- `DocumentUploader`: Allows users to upload files and handles the upload logic.
+- `DocumentList`: Displays uploaded documents and fetches summaries or keywords on demand.
+- `Dashboard`: Main component that includes `DocumentUploader` and `DocumentList`, orchestrating the user interactions.
+- `Login` and `UserContext`: Manage user authentication and provide user context throughout the app.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Docker Deployment
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+The provided Dockerfile containerizes the React app for production deployment. It builds the app with `npm run build` and serves it using `serve`.
