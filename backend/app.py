@@ -43,7 +43,7 @@ CORS(app, supports_credentials=True)
 nlp = spacy.load("en_core_web_sm")
 db.init_app(app)
 migrate = Migrate(app, db)
-
+print(app.config['SQLALCHEMY_DATABASE_URI'])
 
 file_processing_queue = Queue()
 
@@ -81,7 +81,8 @@ def process_file(filepath, filename, user_id):
     full_text = text
 
     document_sentiment = analyze_sentiment(full_text)
-    document = Document(content=full_text, sentiment=document_sentiment, filename=filename, user_id=user_id)  # Use user_id
+    document = Document(content=full_text, sentiment=document_sentiment, filename=filename,
+                        user_id=user_id)  # Use user_id
     db.session.add(document)
 
     paragraphs_text = split_into_paragraphs(full_text)
@@ -124,7 +125,16 @@ def upload_file():
 
     for file in files:
         if file:
-            filename = secure_filename(file.filename)
+            ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'docx', 'csv'}
+
+            def allowed_file(filename):
+                return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+            # In the upload_file function:
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+            else:
+                return jsonify({'error': 'File type not allowed'}), 400
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
             file_processing_queue.put((filepath, filename, userId))  # Include userId in the queue
@@ -138,7 +148,6 @@ def upload_file():
     return response
 
 
-
 @app.route('/api/documents/user/<user_id>', methods=['GET'])
 def get_user_documents(user_id):
     try:
@@ -150,8 +159,6 @@ def get_user_documents(user_id):
         return jsonify(documents_data), 200
     except Exception as e:
         return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
-
-
 
 
 @app.route('/document/summary', methods=['POST'])
@@ -208,6 +215,10 @@ def search_articles():
     if not keyword:
         return jsonify({'error': 'Keyword is required'}), 400
 
+    import re
+    if not re.match("^[a-zA-Z0-9 ]*$", keyword):
+        return jsonify({'error': 'Invalid keyword format'}), 400
+
     params = {
         'key': GOOGLE_API_KEY,
         'cx': GOOGLE_CX,
@@ -222,6 +233,11 @@ def search_articles():
     else:
         return jsonify({'error': 'Failed to fetch search results'}), response.status_code
 
+
+def log_error(e):
+    pass
+
+
 @app.route('/api/filter/sentiment/<sentiment>', methods=['GET'])
 def filter_by_sentiment(sentiment):
     try:
@@ -233,7 +249,8 @@ def filter_by_sentiment(sentiment):
 
         return jsonify({'paragraphs': paragraphs_data, 'sentences': sentences_data}), 200
     except Exception as e:
-        return jsonify({'error': 'Internal Server Error', 'message': str(e)}), 500
+        return jsonify({'error': 'An internal error occurred'}), 500
+
 
 @app.route('/api/search/keyword', methods=['POST'])
 def search_by_keyword():
@@ -252,7 +269,6 @@ def search_by_keyword():
     return jsonify({'sentences': sentences_data, 'paragraphs': paragraphs_data}), 200
 
 
-
 def get_document_summary(document_text):
     try:
         completion = client.chat.completions.create(
@@ -267,6 +283,7 @@ def get_document_summary(document_text):
         # Handle exceptions or log error and return an informative message or raise the error
         print(f"An error occurred: {str(e)}")
         raise
+
 
 def get_keyword_definition(keyword):
     try:
