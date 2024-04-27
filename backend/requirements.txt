@@ -10,7 +10,7 @@ Pillow==10.2.0
 pytesseract==0.3.8
 python-dotenv==1.0.1
 python_docx==0.8.11
-Requests==2.31.0
+requests==2.31.0
 spacy==3.7.2
 textblob==0.17.1
 Werkzeug==3.0.1
