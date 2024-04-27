@@ -27,10 +27,12 @@ jobs:
     - name: Install dependencies
       run: |
         cd backend
+        python -m pip install --upgrade pip
         pip install -r requirements.txt
-
+    
     - name: Run Pytest
       run: |
         cd backend
-        pytest
+        python -m pytest
+
 
