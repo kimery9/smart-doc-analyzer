@@ -36,3 +36,6 @@ Welcome to the Document Management System! This system provides various function
 3. **Keyword Extraction**: Keywords are automatically extracted from uploaded documents and displayed.
 4. **Sentiment Analysis**: Uploaded documents are analyzed for sentiment, and sentiment filters are available for search.
 5. **Search Functionality**: Use the search bar to search for documents based on keywords or sentiment.
+
+### Demo:
+https://drive.google.com/file/d/1RsjaVawj3nRAQtztV9Ope8WTdylKwuRS/view?usp=sharing
