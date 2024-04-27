@@ -325,12 +325,15 @@ def extract_keywords(sentence):
 
 
 def extract_text_from_pdf(filepath):
+    import fitz  # Make sure this import is at the function level if you are patching it in tests
     text = ""
-    with fitz.open(filepath) as doc:
+    try:
+        doc = fitz.open(filepath)
         for page in doc:
             text += page.get_text()
+    except Exception as e:
+        print(f"Failed to extract text: {e}")
     return text
-
 
 def extract_text_from_image(filepath):
     return pytesseract.image_to_string(Image.open(filepath))
@@ -343,11 +346,12 @@ def extract_text_from_txt(filepath):
 
 
 def extract_text_from_docx(filepath):
-    doc = DocxDocument(filepath)
-    fullText = []
-    for para in doc.paragraphs:
-        fullText.append(para.text)
-    return '\n'.join(fullText)
+    try:
+        doc = DocxDocument(filepath)
+        return '\n'.join(para.text for para in doc.paragraphs if para.text)
+    except Exception as e:
+        print(f"Error reading {filepath}: {str(e)}")
+        return ''
 
 
 if __name__ == '__main__':
