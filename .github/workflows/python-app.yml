@@ -23,6 +23,8 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.10"
+    - name: Change to the correct directory
+      run: cd backend
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
