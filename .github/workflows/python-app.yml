@@ -30,6 +30,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         python -m spacy download en_core_web_sm
+        pip install pytest-mock  # This can be removed if pytest-mock is added to requirements.txt
     
     - name: Run Pytest
       run: |
