@@ -11,7 +11,8 @@ from app import extract_text_from_image  # Make sure your function is correctly 
 class TestExtractTextFromImage:
 
     @pytest.fixture(autouse=True)
-    def setup_mocks(self, mocker):
+    def setup_mocks(self, mocker, monkeypatch):
+        monkeypatch.setenv('OPENAI_API_KEY', 'fake-api-key')
         # Patch Image.open globally for all methods
         self.mock_open = mocker.patch('PIL.Image.open', return_value=MagicMock(spec=Image))
         # Patch pytesseract.image_to_string globally for all methods

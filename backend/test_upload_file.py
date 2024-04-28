@@ -3,8 +3,9 @@ import io
 import unittest
 from unittest.mock import patch
 from app import app, db  # Importing directly from your app.py
-
+import os
 class UploaderBlueprintTestCase(unittest.TestCase):
+    @patch.dict(os.environ, {'OPENAI_API_KEY': 'test-api-key'})
     def setUp(self):
         self.app = app
         self.app.config['TESTING'] = True

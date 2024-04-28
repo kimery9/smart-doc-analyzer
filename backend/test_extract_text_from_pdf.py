@@ -9,11 +9,11 @@ import fitz
 
 class TestExtractTextFromPdf:
     @pytest.fixture(autouse=True)
-    def setup_method(self, mocker):
+    def setup_method(self, mocker, monkeypatch):
         self.mock_doc = mocker.MagicMock()
         self.mocker = mocker
         mocker.patch('fitz.open', return_value=self.mock_doc)
-
+        monkeypatch.setenv('OPENAI_API_KEY', 'fake-api-key')
         # Simple test to check text extraction from a single-page PDF
 
     def test_simple_text_extraction(self, mocker):

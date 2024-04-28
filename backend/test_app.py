@@ -13,7 +13,9 @@ def client():
         yield app.test_client()  # This will automatically use the app context
         db.session.remove()
         db.drop_all()
-
+@pytest.fixture(autouse=True)
+def set_env_vars(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-api-key')
 
 def test_process_file_pdf(client):
     with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
